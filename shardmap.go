@@ -8,20 +8,6 @@ import (
 	rhh "github.com/tidwall/hashmap"
 )
 
-type hasher[T comparable] func(v T) uint64
-
-type stdHasher[T comparable] struct {
-	seed maphash.Seed
-}
-
-func newStdHasher[T comparable]() stdHasher[T] {
-	return stdHasher[T]{seed: maphash.MakeSeed()}
-}
-
-func (s stdHasher[T]) Hash(v T) uint64 {
-	return maphash.Comparable(s.seed, v)
-}
-
 // Map is a hashmap. Like map[string]interface{}, but sharded and thread-safe.
 type Map[K comparable, V any] struct {
 	init   sync.Once
@@ -30,9 +16,8 @@ type Map[K comparable, V any] struct {
 	mus    []sync.RWMutex
 	maps   []*rhh.Map[K, V]
 
-	hasher hasher[K]
+	seed maphash.Seed
 
-	zeroK K
 	zeroV V
 }
 
@@ -41,8 +26,7 @@ type Map[K comparable, V any] struct {
 //
 //	var m shardmap.Map
 func New[K comparable, V any](cap int) *Map[K, V] {
-	h := newStdHasher[K]()
-	return &Map[K, V]{cap: cap, hasher: h.Hash}
+	return &Map[K, V]{cap: cap}
 }
 
 // Clear out all values from map
@@ -176,12 +160,12 @@ func (m *Map[K, V]) Range(iter func(key K, value V) bool) {
 }
 
 func (m *Map[K, V]) choose(key K) int {
-	return int(m.hasher(key) & uint64(m.shards-1))
-	//return int(xxhash.Sum64String(key) & uint64(m.shards-1))
+	return int(maphash.Comparable(m.seed, key) & uint64(m.shards-1))
 }
 
 func (m *Map[K, V]) initDo() {
 	m.init.Do(func() {
+
 		m.shards = 1
 		for m.shards < runtime.NumCPU()*16 {
 			m.shards *= 2
@@ -192,9 +176,7 @@ func (m *Map[K, V]) initDo() {
 		for i := 0; i < len(m.maps); i++ {
 			m.maps[i] = rhh.New[K, V](scap)
 		}
-		if m.hasher == nil {
-			m.hasher = newStdHasher[K]().Hash
-		}
+		m.seed = maphash.MakeSeed()
 	})
 }
 
