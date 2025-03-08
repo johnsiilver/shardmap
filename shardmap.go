@@ -41,7 +41,7 @@ func (m *Map[K, V]) Clear() {
 
 // Set assigns a value to a key.
 // Returns the previous value, or false when no value was assigned.
-func (m *Map[K, V]) Set(key K, value V) (prev any, replaced bool) {
+func (m *Map[K, V]) Set(key K, value V) (prev V, replaced bool) {
 	m.initDo()
 	shard := m.choose(key)
 	m.mus[shard].Lock()
