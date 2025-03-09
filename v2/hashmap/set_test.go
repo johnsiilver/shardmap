@@ -37,6 +37,14 @@ func TestSet(t *testing.T) {
 		t.Fatalf("expected %d got %d", len(skeys), s.Len())
 	}
 
+	skeys = nil
+	for k := range s.All() {
+		skeys = append(skeys, k)
+	}
+	if len(skeys) != s.Len() {
+		t.Fatalf("expected %d got %d", len(skeys), s.Len())
+	}
+
 	for i := 0; i < len(keys); i++ {
 		s.Delete(keys[i])
 		if s.Len() != len(keys)-i-1 {

@@ -5,10 +5,8 @@
 package hashmap
 
 import (
+	"hash/maphash"
 	"iter"
-	"unsafe"
-
-	"github.com/zeebo/xxh3"
 )
 
 const (
@@ -18,6 +16,8 @@ const (
 	maxHash     = ^uint64(0) >> dibBitSize  // max 28,147,497,671,0655
 	maxDIB      = ^uint64(0) >> hashBitSize // max 65,535
 )
+
+var seed = maphash.MakeSeed()
 
 type entry[K comparable, V any] struct {
 	hdib  uint64 // bitfield { hash:48 dib:16 }
@@ -44,24 +44,7 @@ func makeHDIB(hash, dib int) uint64 {
 // hash returns a 48-bit hash for 64-bit environments, or 32-bit hash for
 // 32-bit environments.
 func (m *Map[K, V]) hash(key K) int {
-	// The unsafe package is used here to cast the key into a string container
-	// so that the hasher can work. The hasher normally only accept a string or
-	// []byte, but this effectively allows it to accept value type.
-	// The m.kstr bool, which is set from the New function, indicates that the
-	// key is known to already be a true string. Otherwise, a fake string is
-	// derived by setting the string data to value of the key, and the string
-	// length to the size of the value.
-	var strKey string
-	if m.kstr {
-		strKey = *(*string)(unsafe.Pointer(&key))
-	} else {
-		strKey = *(*string)(unsafe.Pointer(&struct {
-			data unsafe.Pointer
-			len  int
-		}{unsafe.Pointer(&key), m.ksize}))
-	}
-	// Now for the actual hashing.
-	return int(xxh3.HashString(strKey) >> dibBitSize)
+	return int(maphash.Comparable(seed, key) >> dibBitSize)
 }
 
 // Map is a hashmap. Like map[string]interface{}
@@ -91,19 +74,7 @@ func New[K comparable, V any](cap int) *Map[K, V] {
 	m.mask = len(m.buckets) - 1
 	m.growAt = int(float64(len(m.buckets)) * loadFactor)
 	m.shrinkAt = int(float64(len(m.buckets)) * (1 - loadFactor))
-	m.detectHasher()
 	return m
-}
-
-func (m *Map[K, V]) detectHasher() {
-	// Detect the key type. This is needed by the hasher.
-	var k K
-	switch ((interface{})(k)).(type) {
-	case string:
-		m.kstr = true
-	default:
-		m.ksize = int(unsafe.Sizeof(k))
-	}
 }
 
 func (m *Map[K, V]) resize(newCap int) {

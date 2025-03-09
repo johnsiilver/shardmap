@@ -6,6 +6,7 @@ package hashmap
 
 import (
 	"fmt"
+	"iter"
 	"math/rand"
 	"os"
 	"reflect"
@@ -60,52 +61,44 @@ func shuffle[K comparable](nums []K) {
 	}
 }
 
-func init() {
-	//var seed int64 = 1519776033517775607
-	seed := (time.Now().UnixNano())
-	println("seed:", seed)
-	rand.Seed(seed)
+type imap[K comparable, V any] struct {
+	m *Map[K, V]
 }
 
-type imap struct {
-	m *Map[string, interface{}]
-}
-
-func newimap(cap int) *imap {
-	m := new(imap)
-	m.m = New[string, interface{}](cap)
+func newimap[K comparable, V any](cap int) *imap[K, V] {
+	m := new(imap[K, V])
+	m.m = New[K, V](cap)
 	return m
 }
 
-func (m *imap) Get(key string) (interface{}, bool) {
+func (m *imap[K, V]) Get(key K) (interface{}, bool) {
 	if m.m == nil {
 		return nil, false
 	}
 	return m.m.Get(key)
 }
-func (m *imap) Set(key string, value interface{}) (interface{}, bool) {
+func (m *imap[K, V]) Set(key K, value V) (V, bool) {
 	if m.m == nil {
-		m.m = new(Map[string, interface{}])
+		m.m = new(Map[K, V])
 	}
 	return m.m.Set(key, value)
 }
-func (m *imap) Delete(key string) (interface{}, bool) {
+func (m *imap[K, V]) Delete(key K) (V, bool) {
 	if m.m == nil {
-		return nil, false
+		var zero V
+		return zero, false
 	}
 	return m.m.Delete(key)
 }
-func (m *imap) Len() int {
+func (m *imap[K, V]) Len() int {
 	if m.m == nil {
 		return 0
 	}
 	return m.m.Len()
 }
-func (m *imap) Scan(iter func(key string, value interface{}) bool) {
-	if m.m == nil {
-		return
-	}
-	m.m.Scan(iter)
+
+func (m *imap[K, V]) All() iter.Seq2[K, V] {
+	return m.m.All()
 }
 
 func TestRandomData(t *testing.T) {
@@ -113,14 +106,14 @@ func TestRandomData(t *testing.T) {
 	start := time.Now()
 	for time.Since(start) < time.Second*2 {
 		nums := random(N, true)
-		var m *imap
+		var m *imap[string, any]
 		switch rand.Int() % 5 {
 		default:
-			m = newimap(N / ((rand.Int() % 3) + 1))
+			m = newimap[string, any](N / ((rand.Int() % 3) + 1))
 		case 1:
-			m = new(imap)
+			m = new(imap[string, any])
 		case 2:
-			m = newimap(0)
+			m = newimap[string, any](0)
 		}
 		v, ok := m.Get(k(999))
 		if ok || v != nil {
@@ -205,20 +198,12 @@ func TestRandomData(t *testing.T) {
 		if m.Len() != N/2 {
 			t.Fatalf("expected %v, got %v", N/2, m.Len())
 		}
-		m.Scan(func(key keyT, value valueT) bool {
-			if value != add(key, 1) {
-				t.Fatalf("expected %v, got %v", add(key, 1), value)
+		for k, v := range m.All() {
+			if v != add(k, 1) {
+				t.Fatalf("expected %v, got %v", add(k, 1), v)
 			}
-			return true
-		})
-		var n int
-		m.Scan(func(key keyT, value valueT) bool {
-			n++
-			return false
-		})
-		if n != 1 {
-			t.Fatalf("expected %v, got %v", 1, n)
 		}
+
 		for i := len(nums) / 2; i < len(nums); i++ {
 			v, ok := m.Delete(nums[i])
 			if !ok || v != add(nums[i], 1) {
